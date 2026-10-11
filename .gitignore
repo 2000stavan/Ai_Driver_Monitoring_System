@@ -1,0 +1,32 @@
+# Data and large artefacts never go into git
+data/
+# Downloaded pretrained weights and our trained models (re-created by the scripts)
+models/
+outputs/
+wandb/
+*.mp4
+*.avi
+*.tar.gz
+*.zip
+*.hdf5
+*.h5
+*.safetensors
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+kaggle.json
+
+# OS / editors
+.DS_Store
+.vscode/
+.claude/settings.local.json
+.idea/
+dist/

@@ -1,0 +1,16 @@
+# Telematics module (INITIALPLAN §5) — v1 STARTING VALUES.
+# Thresholds are refined from the distribution of everyday Indian driving in LEVIN and the
+# labelled Pune VIIT events; they are not final.
+
+smooth_s: 0.5            # moving-average window on the 25 Hz vehicle-frame acceleration
+min_speed_kmh: 5         # ignore events while (almost) stationary
+
+events:
+  harsh_brake_g: 0.30    # longitudinal deceleration
+  harsh_accel_g: 0.30    # longitudinal acceleration
+  sharp_turn_g: 0.35     # lateral acceleration
+  min_duration_s: 0.5
+
+orientation:
+  min_moving_s: 60       # need this much driving in a trip to estimate the forward axis
+  min_forward_corr: 0.5  # below this, forward-axis estimate is flagged unreliable

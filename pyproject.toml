@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dms"
+version = "0.1.0"
+description = "AI-based driver monitoring system for Indian roads"
+requires-python = ">=3.10"
+dependencies = [
+    "mediapipe>=1.1",
+    "opencv-python>=4.10",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyyaml>=6.0",
+    "tabulate>=0.9",
+]
+
+[project.optional-dependencies]
+ml = [
+    "torch>=2.4",
+    "torchvision>=0.19",
+    "safetensors>=0.4",
+    "transformers>=4.45",
+    "ultralytics>=8.3",
+    "xgboost>=2.1",
+    "scikit-learn>=1.5",
+]
+app = ["streamlit>=1.38", "plotly>=5.24"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

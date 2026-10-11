@@ -1,0 +1,52 @@
+# Cabin module (fatigue + head-pose distraction) — v1 starting values.
+# All thresholds are STARTING VALUES. They are tuned on DMD (frame-level eye/yawn labels)
+# and then on Indian data (INVEDRIFAC, own recordings). See INITIALPLAN.md §4.2.
+
+model_path: models/face_landmarker.task
+hand_model_path: models/hand_landmarker.task
+gaze_model_path: models/l2cs/l2cs_gaze360_resnet50.safetensors
+
+calibration:
+  seconds: 60            # offline / recorded drives. 60 s robust beat 10 s on DMD and INVEDRIFAC
+                         # (reports/results/calibration_comparison.md); production: first 3-5 min
+  live_seconds: 15       # webcam demo, so you are not kept waiting
+  frontal_deg: 15        # only frames within this of the driver's dominant head pose set the eye level
+  mad_k: 3.0             # drop EAR outliers beyond k * MAD (tracking glitches)
+
+eyes:
+  closed_ear_ratio: 0.65 # eye counts as closed when EAR < ratio * personal open-eye EAR
+  closed_blink_score: 0.55  # ...or when MediaPipe's mean eyeBlink blendshape score exceeds this
+  blink_min_s: 0.05      # shorter closures are treated as noise
+  blink_max_s: 0.5       # closure up to this = normal blink
+  microsleep_min_s: 1.0  # closure at least this long = microsleep; in between = slow blink
+
+mouth:
+  yawn_mar: 0.45         # mouth aspect ratio above this...
+  yawn_jaw_score: 0.45   # ...or jawOpen blendshape above this counts as wide-open mouth
+  yawn_min_s: 1.5        # wide-open mouth for at least this long = yawn
+  hand_mouth_dist: 0.3   # hand within this many face widths of the mouth = mouth covered
+  yawn_hand_min_s: 2.0   # mouth covered by a hand at least this long = yawn with hand
+  hand_gap_s: 0.5        # tolerate hand-detection dropouts up to this long
+
+perclos:
+  window_s: 60           # PERCLOS = fraction of eye-closed frames over this window
+  drowsy_threshold: 0.15 # rule-based drowsy flag (replaced by the learned classifier in Phase 1)
+  min_fill: 0.5          # need at least this fraction of the window before flagging
+
+head:
+  off_road_yaw_deg: 30   # deviation from personal neutral yaw
+  off_road_pitch_deg: 20 # deviation from personal neutral pitch
+  off_road_min_s: 2.0    # eyes-off-road (head-pose proxy until L2CS-Net gaze is added)
+  nod_pitch_deg: 15      # pitch drop below neutral...
+  nod_max_s: 1.5         # ...that recovers within this time = nod
+  nod_min_s: 0.2         # shorter pitch dips are tracking noise
+
+# Region profiles: load_config("cabin", profile="india") overlays these on the defaults above.
+# Thresholds do not transfer between regions in either direction (reports/results/invedrifac_adaptation.md):
+#   Western default -> DMD eyes-closed F1 0.92, INVEDRIFAC eye-event F1 0.50
+#   india           -> DMD 0.79, INVEDRIFAC 0.80 (leave-one-driver-out on our Indian labels; same choice in all 24 folds)
+profiles:
+  india:
+    eyes:
+      closed_ear_ratio: 0.8
+      closed_blink_score: 0.5
