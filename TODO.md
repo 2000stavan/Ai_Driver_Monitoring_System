@@ -5,7 +5,7 @@ Tick each box when done and tell Claude, so the matching code step can run.
 ## 1. Colab jobs (need stable internet; keep the tab open)
 - [ ] **Notebook A, IDD download**: `notebooks/02_idd_download.ipynb` (CPU runtime). Get the two links after logging in at https://idd.insaan.iiit.ac.in/
   - IDD Detection + IDD Segmentation Part I → Drive `DMS/raw/idd/` (~3–6 h with the parallel `wget` cell)
-- [x] **Notebook B, RLDD Fold 1** (done 2026-10-10; Folds 2–5 optional: set `FOLDS = ['Fold2']` etc., run cells 1→2→3→4b, ~3 h each, then copy the new `FoldN` folder to `data/processed/rldd/`): `notebooks/01_rldd_extract_features.ipynb` (CPU runtime)
+- [x] **Notebook B, RLDD Folds 1–2** (done 2026-10-12; Folds 3–5 optional: set `FOLDS = ['Fold2']` etc., run cells 1→2→3→4b, ~3 h each, then copy the new `FoldN` folder to `data/processed/rldd/`): `notebooks/01_rldd_extract_features.ipynb` (CPU runtime)
   - First upload `dist/dms_code.zip` → Drive `DMS/code/dms_code.zip` (rebuilt 2026-10-09; re-upload it)
   - RLDD: https://sites.google.com/view/utarldd/home (Drive shortcut `MyDrive/Drowsiness`) (~2 h per fold)
 
@@ -35,7 +35,7 @@ Tick each box when done and tell Claude, so the matching code step can run.
 ## What each task unlocks (Claude's side)
 | When this is done | Claude builds / runs |
 |---|---|
-| ~~RLDD Fold 1~~ | ✅ Done: fatigue classifier (`reports/results/fatigue_rldd.md`); more folds = rerun `scripts/train_fatigue_rldd.py` |
+| ~~RLDD Folds 1–2~~ | ✅ Done (24 subjects): fatigue classifier (`reports/results/fatigue_rldd.md`); more folds = rerun `scripts/train_fatigue_rldd.py` |
 | ~~INVEDRIFAC labels~~ | ✅ Done: Western vs India-adapted detector (`reports/results/invedrifac_adaptation.md`) |
 | ~~UAH-DriveSet~~ | ✅ Done: behaviour classifier (`reports/results/telematics_uah.md`) |
 | Own Session B drives | Indian telematics validation |

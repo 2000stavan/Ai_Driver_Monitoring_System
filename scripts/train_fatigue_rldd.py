@@ -106,6 +106,29 @@ def score(w: pd.DataFrame, y: np.ndarray, prob: np.ndarray) -> dict:
     return out
 
 
+def video_probs(w: pd.DataFrame, y: np.ndarray, prob: np.ndarray) -> pd.DataFrame:
+    return pd.DataFrame({"subject": w["subject"].to_numpy(), "y": y, "p": prob[:, 1]}).groupby(
+        ["subject", "y"])["p"].mean().reset_index()
+
+
+def bootstrap_gain(a: pd.DataFrame, b: pd.DataFrame, n: int = 2000, seed: int = 0) -> dict:
+    """Resample subjects; AUC of a and b on the same resample. Returns 95 % intervals and P(b > a)."""
+    rng = np.random.default_rng(seed)
+    subs = a["subject"].unique()
+    ra, rb = [], []
+    for _ in range(n):
+        pick = rng.choice(subs, len(subs))
+        da = pd.concat([a[a["subject"] == s] for s in pick])
+        db = pd.concat([b[b["subject"] == s] for s in pick])
+        if da["y"].nunique() < 2:
+            continue
+        ra.append(roc_auc_score(da["y"], da["p"]))
+        rb.append(roc_auc_score(db["y"], db["p"]))
+    ra, rb = np.array(ra), np.array(rb)
+    return {"a_ci": np.percentile(ra, [2.5, 97.5]), "b_ci": np.percentile(rb, [2.5, 97.5]),
+            "gain_ci": np.percentile(rb - ra, [2.5, 97.5]), "p_gain": float((rb > ra).mean())}
+
+
 def perclos_rule(w: pd.DataFrame, y: np.ndarray, threshold: float) -> dict:
     p = w["perclos"].fillna(0).to_numpy()
     prob = np.c_[1 - p, p]
@@ -141,7 +164,7 @@ def main() -> None:
     recs = load_rldd()
     subjects = sorted({s for s, _ in recs})
     print(f"RLDD: {len(recs)} videos, {len(subjects)} subjects")
-    results, wins = {}, {}
+    results, wins, vids = {}, {}, {}
     for mode in ("self", "personal"):
         w = build_windows(recs, cfg, mode)
         wins[mode] = w
@@ -150,13 +173,16 @@ def main() -> None:
         yb = (wb["label"] == 2).astype(int).to_numpy()
         if mode == "self":
             results["PERCLOS rule (>= 0.15), no training | alert vs drowsy"] = perclos_rule(wb, yb, 0.15)
-        results[f"XGBoost, {mode} calibration | alert vs drowsy"] = score(wb, yb, loso(wb, yb, 2))
+        pb = loso(wb, yb, 2)
+        vids[mode] = video_probs(wb, yb, pb)
+        results[f"XGBoost, {mode} calibration | alert vs drowsy"] = score(wb, yb, pb)
         y3 = w["label"].to_numpy()
         results[f"XGBoost, {mode} calibration | 3 classes"] = score(w.reset_index(drop=True), y3,
                                                                     loso(w.reset_index(drop=True), y3, 3))
         for k in [k for k in results if mode in k or "rule" in k]:
             print(k, {a: (round(b, 3) if isinstance(b, float) else b) for a, b in results[k].items()})
     table = pd.DataFrame(results).T
+    boot = bootstrap_gain(vids["self"], vids["personal"])
 
     # final binary model (self calibration: INVEDRIFAC has no alert reference drive)
     w = wins["self"]
@@ -180,6 +206,10 @@ def main() -> None:
              f"< {MIN_FACE:.0%} of frames dropped. Labels are the subject's own state for the whole video "
              "(self-recorded at home, not driving). XGBoost, class-balanced, **leave-one-subject-out**.", "",
              table.map(lambda v: round(v, 3) if isinstance(v, float) else v).to_markdown(), "",
+             f"**Personal baseline vs self calibration** (alert vs drowsy, video AUC, 2,000 bootstrap resamples of "
+             f"subjects): self 95 % CI {boot['a_ci'][0]:.2f}-{boot['a_ci'][1]:.2f}, personal "
+             f"{boot['b_ci'][0]:.2f}-{boot['b_ci'][1]:.2f}; gain {boot['gain_ci'][0]:+.3f} to {boot['gain_ci'][1]:+.3f}, "
+             f"personal better in {boot['p_gain']:.1%} of resamples.", "",
              "Median window features per label (self calibration):", "",
              per_label.round(3).to_markdown(), "",
              "Top features (final binary model): " + ", ".join(f"{k} ({v:.2f})" for k, v in imp.head(6).items()), "",

@@ -27,15 +27,15 @@ Detects driver fatigue and distraction (cabin camera), harsh braking / accelerat
 | **Indian drivers, India-adapted thresholds** (leave-one-driver-out) | same | eye-event F1 **0.80** (clear videos 0.88); [`invedrifac_adaptation.md`](reports/results/invedrifac_adaptation.md) |
 | Robust personal calibration | DMD + 24 INVEDRIFAC Indian drivers | eye F1 0.885 → 0.923; drivers with a broken baseline 3 → 0 |
 
-**Cabin: fatigue classifier** (UTA-RLDD Fold 1: 12 subjects, 36 videos, XGBoost on 60 s windows, leave-one-subject-out; [`fatigue_rldd.md`](reports/results/fatigue_rldd.md))
+**Cabin: fatigue classifier** (UTA-RLDD Folds 1–2: 24 subjects, 72 videos, XGBoost on 60 s windows, leave-one-subject-out; [`fatigue_rldd.md`](reports/results/fatigue_rldd.md))
 
 | Method | Alert vs drowsy: video AUC | Videos correct | 3 classes: window F1 |
 |---|---|---|---|
-| PERCLOS rule (no training) | 0.78 | 13/24 | — |
-| XGBoost, each video calibrated on itself | 0.81 | 20/24 | 0.40 |
-| XGBoost, **personal baseline** (calibrated on the driver's alert video) | **0.94** | **21/24** | **0.51** |
+| PERCLOS rule (no training) | 0.79 | 27/48 | — |
+| XGBoost, each video calibrated on itself | 0.74 | 33/48 | 0.38 |
+| XGBoost, **personal baseline** (calibrated on the driver's alert video) | **0.86** | **39/48** | **0.50** |
 
-The personal baseline (innovation #4) is the single biggest gain. Applied to the Indian INVEDRIFAC drivers it gives a per-driver drowsiness score (no labels yet, so not a validation).
+The personal baseline (innovation #4) is the single biggest gain: +0.03 to +0.23 video AUC (95 % bootstrap interval over subjects; better in 99 % of resamples). Without it, the trained model does not beat the simple PERCLOS rule. Applied to the Indian INVEDRIFAC drivers it gives a per-driver drowsiness score (no labels yet, so not a validation).
 
 **Cabin: distraction** (YOLO11m COCO + MediaPipe Hands + L2CS-Net gaze → XGBoost, leave-one-subject-out, DMD 14 subjects)
 
@@ -119,13 +119,13 @@ reports/          dataset audit and results
 | Phase (INITIALPLAN §14) | State |
 |---|---|
 | 0. Setup | ✅ Repo, environment, dataset survey + audit, access requests |
-| 1. Cabin base | ✅ Fatigue events, gaze, webcam demo, robust calibration, fatigue classifier on RLDD Fold 1 · ⏳ more RLDD folds (optional) |
+| 1. Cabin base | ✅ Fatigue events, gaze, webcam demo, robust calibration, fatigue classifier on RLDD Folds 1–2 (24 subjects) · ⏳ Folds 3–5 (optional) |
 | 2. Telematics base | ✅ LEVIN pipeline + profile, UAH classifier + LEVIN domain-shift check · ⏳ Indian validation waits for own controlled drives |
 | 3. Road base | ✅ SegFormer Western vs Indian on IDD Lite · ⏳ YOLO hazards wait for IDD Detection (Colab) |
 | 4. Own recordings | ⏭️ Not in v1 (protocol + consent form ready for the internship) |
 | 5. Distraction | ✅ Phone / drinking on DMD · ⏳ texting, eating, RHD clips |
 | 6. Indian adaptation | ✅ INVEDRIFAC labelled (881 clips) → eye-event F1 0.50 → 0.80 · ⏳ DashGaze full (requested), full IDD |
-| 7. Personal baseline | ✅ Calibration ablation; personal baseline raises RLDD drowsy-video AUC 0.81 → 0.94 |
+| 7. Personal baseline | ✅ Calibration ablation; personal baseline raises RLDD drowsy-video AUC 0.74 → 0.86 (24 subjects, gain significant) |
 | 8. Context attribution | ✅ Rule-based version + tests |
 | 9. Dashboard | ✅ Three views on separate datasets · ⏳ one synced drive |
 
