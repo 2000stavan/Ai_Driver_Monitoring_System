@@ -2,7 +2,9 @@
 
     .venv/bin/streamlit run app/streamlit_app.py
 
-Three views, each on a public dataset (a synchronised cabin + telematics + road drive is future work):
+An upload view for any driver-facing video, plus three views, each on a public dataset
+(a synchronised cabin + telematics + road drive is future work):
+  0. Analyse a video - upload a clip: personal calibration, detected events, key frames
   1. Driver camera  - a DMD recording: our detected events vs. DMD's ground-truth labels
   2. Driving        - a LEVIN trip: speed, vehicle-frame acceleration, harsh events, attributed context
   3. Road camera    - an IDD Lite image: Western-only (Cityscapes) vs. Indian fine-tuned segmentation
@@ -34,6 +36,7 @@ DMD_SETS = {
 LEVIN = PROJECT_ROOT / "data/raw/telematics/levin/csv"
 IDD_LITE = PROJECT_ROOT / "data/raw/road/idd_lite/idd20k_lite"
 ROAD_MODEL = PROJECT_ROOT / "models/road/segformer_idd_lite.pt"
+UPLOADS = PROJECT_ROOT / "outputs/uploads"
 COLORS = {"BLINK": "#9aa5b1", "SLOW_BLINK": "#f0ad4e", "MICROSLEEP": "#d9534f", "YAWN": "#5bc0de",
           "NOD": "#8e6cc9", "EYES_OFF_ROAD": "#e67e22", "DROWSY": "#c0392b",
           "HARSH_BRAKE": "#d9534f", "HARSH_ACCEL": "#f0ad4e", "SHARP_TURN": "#8e6cc9"}
@@ -61,7 +64,85 @@ def segs(mask: np.ndarray, fps: float, kind: str) -> list[tuple[float, float, st
     return [(s / fps, (e - 1) / fps, kind) for s, e in zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1))]
 
 
-tab_cabin, tab_drive, tab_road = st.tabs(["Driver camera", "Driving behaviour", "Road camera"])
+tab_upload, tab_cabin, tab_drive, tab_road = st.tabs(["Analyse a video", "Driver camera", "Driving behaviour", "Road camera"])
+
+with tab_upload:
+    import hashlib
+    import sys
+
+    import cv2
+
+    sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+    from extract_cabin_features import extract  # noqa: E402
+
+    st.write("Upload a short video of a driver's face (phone or dashcam, face visible). The first part of the clip "
+             "is used as the driver's personal baseline, so start with a few seconds of normal, alert driving.")
+    up = st.file_uploader("Driver-facing video", type=["mp4", "mov", "m4v", "avi", "mkv"])
+    profile = st.radio("Thresholds", ["default", "india"], horizontal=True,
+                       help="india = eye thresholds adapted on Indian drivers (INVEDRIFAC)")
+    if up is not None:
+        data = up.getvalue()
+        key = hashlib.md5(data).hexdigest()
+        store = st.session_state.setdefault("uploads", {})
+        if key not in store:
+            UPLOADS.mkdir(parents=True, exist_ok=True)
+            vid = UPLOADS / f"{key}{Path(up.name).suffix.lower()}"
+            vid.write_bytes(data)
+            with st.spinner("Tracking face and hands in every frame ... (about a third of the video length)"):
+                store[key] = (vid, extract(vid, None, progress=False, hands=True, target_fps=15))
+        vid, feats = store[key]
+        if not feats["face"].any():
+            st.error("No face found in this video.")
+        else:
+            dur = float(feats["t"].iloc[-1])
+            calib = float(np.clip(dur * 0.25, 5, 60))
+            cfg = load_config("cabin", profile=None if profile == "default" else profile)
+            try:
+                frames_u, events_u, mon_u = run_monitor(feats, cfg, calib_s=calib)
+            except RuntimeError:
+                st.error("The face is not visible long enough at the start to calibrate.")
+                st.stop()
+            kinds = ["BLINK", "SLOW_BLINK", "MICROSLEEP", "YAWN", "NOD", "EYES_OFF_ROAD", "DROWSY"]
+            n = {k: sum(e.type == k for e in events_u) for k in kinds}
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
+            c1.metric("Duration", f"{dur:.0f} s")
+            c2.metric("Face found", f"{feats['face'].mean():.0%}")
+            c3.metric("Blinks / min", f"{n['BLINK'] / max(dur / 60, 1e-9):.0f}")
+            c4.metric("Microsleeps", n["MICROSLEEP"])
+            c5.metric("Yawns", n["YAWN"])
+            c6.metric("Eyes off road", n["EYES_OFF_ROAD"])
+            st.caption(f"Personal baseline from the first {calib:.0f} s: open-eye ratio {mon_u.base.ear_open:.3f}.")
+            lanes = {}
+            for e in events_u:
+                lanes.setdefault(e.type, []).append((e.start, e.end, e.type))
+            if lanes:
+                st.plotly_chart(timeline(lanes, "Detected events"), width="stretch")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=frames_u["t"], y=frames_u["ear"] / mon_u.base.ear_open,
+                                     name="eye openness (1 = your normal)", line={"width": 1}))
+            fig.add_trace(go.Scatter(x=frames_u["t"], y=frames_u["mar"], name="mouth opening", line={"width": 1}))
+            fig.add_vrect(x0=0, x1=calib, fillcolor="#5bc0de", opacity=0.12, line_width=0,
+                          annotation_text="calibration", annotation_position="top left")
+            fig.update_layout(height=260, margin={"l": 10, "r": 10, "t": 30, "b": 30}, xaxis_title="time (s)")
+            st.plotly_chart(fig, width="stretch")
+            shown = [e for e in events_u if e.type in ("MICROSLEEP", "SLOW_BLINK", "YAWN", "EYES_OFF_ROAD", "NOD")]
+            shown = sorted(shown, key=lambda e: -(e.end - e.start))[:8]
+            if shown:
+                st.subheader("What it saw")
+                cap = cv2.VideoCapture(str(vid))
+                cols = st.columns(4)
+                for i, e in enumerate(sorted(shown, key=lambda e: e.start)):
+                    cap.set(cv2.CAP_PROP_POS_MSEC, (e.start + e.end) / 2 * 1000)
+                    ok, img = cap.read()
+                    if ok:
+                        cols[i % 4].image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
+                                          caption=f"{e.type}  {e.start:.1f}-{e.end:.1f} s", width="stretch")
+                cap.release()
+            if events_u:
+                table = pd.DataFrame([{"event": e.type, "start_s": e.start, "end_s": e.end, "duration_s": e.end - e.start}
+                                      for e in events_u])
+                st.dataframe(table.round(2), width="stretch")
+                st.download_button("Download events (CSV)", table.to_csv(index=False), "events.csv", "text/csv")
 
 with tab_cabin:
     which = st.radio("DMD bundle", list(DMD_SETS), horizontal=True)
