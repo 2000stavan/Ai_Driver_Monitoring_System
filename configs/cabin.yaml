@@ -26,6 +26,7 @@ mouth:
   yawn_mar: 0.45         # mouth aspect ratio above this...
   yawn_jaw_score: 0.45   # ...or jawOpen blendshape above this counts as wide-open mouth
   yawn_min_s: 1.5        # wide-open mouth for at least this long = yawn
+  yawn_gap_s: 0.8        # bridge dips shorter than this inside one yawn (the reading flickers at the threshold)
   hand_mouth_dist: 0.3   # hand within this many face widths of the mouth = mouth covered
   yawn_hand_min_s: 2.0   # mouth covered by a hand at least this long = yawn with hand
   hand_gap_s: 0.5        # tolerate hand-detection dropouts up to this long

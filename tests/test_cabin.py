@@ -49,7 +49,7 @@ def test_blink_microsleep_and_yawn_events():
         + [_feats(ear=0.05)] * 45  # 1.5 s closure -> microsleep
         + [_feats()] * 30
         + [_feats(mar=0.8)] * 60  # 2 s wide-open mouth -> yawn
-        + [_feats()] * 10
+        + [_feats()] * 40  # a yawn is confirmed once the mouth stays closed longer than yawn_gap_s
     )
     kinds = [e.type for e in _run(mon, frames)]
     assert kinds.count("BLINK") == 1
@@ -105,3 +105,17 @@ def test_india_profile_overlays_defaults():
     assert "profiles" not in base
     assert india["eyes"]["closed_ear_ratio"] == 0.8 and base["eyes"]["closed_ear_ratio"] == 0.65
     assert india["mouth"] == base["mouth"]
+
+
+def test_yawn_with_flickering_mouth_is_one_yawn_and_head_tilt_back_is_not_a_nod():
+    cfg = load_config("cabin")
+    mon = CabinMonitor(cfg, Baseline(ear_open=0.3, mar_rest=0.05, yaw=0.0, pitch=0.0, n_frames=100))
+    yawn = []
+    for _ in range(4):  # mouth reading flickers: 0.5 s open, 0.3 s dip, head tilted back 20 deg
+        yawn += [_feats(mar=0.8, pitch=-20.0)] * 15 + [_feats(mar=0.3, pitch=-20.0)] * 9
+    frames = [_feats()] * 30 + yawn + [_feats()] * 60
+    kinds = [e.type for e in _run(mon, frames)]
+    assert kinds.count("YAWN") == 1
+    assert kinds.count("NOD") == 0
+    nod = [_feats()] * 30 + [_feats(pitch=20.0)] * 15 + [_feats()] * 30  # head drops 0.5 s and recovers
+    assert [e.type for e in _run(CabinMonitor(cfg, mon.base), nod)].count("NOD") == 1

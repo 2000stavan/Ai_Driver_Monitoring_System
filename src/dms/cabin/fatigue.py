@@ -60,6 +60,7 @@ class CabinMonitor:
         self._mouth = _Run()
         self._covered = _Run()
         self._last_cover_t = -math.inf
+        self._last_mouth_t = -math.inf
         self._last_yawn_end = -math.inf
         self._off_road = _Run()
         self._nod_start: float | None = None
@@ -97,10 +98,17 @@ class CabinMonitor:
         e_cfg, m_cfg, h_cfg, p_cfg = (self.cfg[k] for k in ("eyes", "mouth", "head", "perclos"))
 
         closed = f is not None and self.eyes_closed(f)
-        mouth = f is not None and self.mouth_open(f)
-        off_road = f is not None and self.head_off_road(f)
+        mouth_now = f is not None and self.mouth_open(f)
         hm = math.nan if f is None else f.get("hand_mouth", math.nan)
-        if not math.isnan(hm) and hm < m_cfg.get("hand_mouth_dist", 0.3):
+        hand_now = not math.isnan(hm) and hm < m_cfg.get("hand_mouth_dist", 0.3)
+        gap = m_cfg.get("yawn_gap_s", 0.0)
+        # A yawn's mouth reading flickers around the threshold, and a hand raised over an open mouth hides it
+        # (the landmarks then read "closed"): both continue the same yawn instead of splitting it.
+        if mouth_now or (hand_now and t - self._last_mouth_t <= gap):
+            self._last_mouth_t = t
+        mouth = t - self._last_mouth_t <= gap
+        off_road = f is not None and self.head_off_road(f)
+        if hand_now:
             self._last_cover_t = t
         covered = t - self._last_cover_t <= m_cfg.get("hand_gap_s", 0.5)
         # Eyes squeeze shut during a yawn: that closure belongs to the yawn, not a microsleep / PERCLOS.
@@ -129,8 +137,8 @@ class CabinMonitor:
 
         # Wide-open mouth held long enough -> YAWN
         ended, s = self._mouth.update(mouth, t)
-        if ended and t - s >= m_cfg["yawn_min_s"]:
-            self._add_yawn(events, s, t, covered=False)
+        if ended and self._last_mouth_t - s >= m_cfg["yawn_min_s"]:
+            self._add_yawn(events, s, self._last_mouth_t, covered=False)
 
         # Hand held over the mouth (mouth not visible) -> YAWN with hand.
         # In deployment this is ambiguous with eating / drinking; the distraction module
@@ -146,7 +154,8 @@ class CabinMonitor:
 
         # Nod: pitch drops below neutral and recovers quickly
         if f is not None and not math.isnan(f["pitch"]) and not math.isnan(self.base.pitch):
-            dropped = abs(f["pitch"] - self.base.pitch) > h_cfg["nod_pitch_deg"]
+            # head DROP only (pitch grows when the head goes down); a yawn tilts the head back, not a nod
+            dropped = f["pitch"] - self.base.pitch > h_cfg["nod_pitch_deg"] and not mouth and not covered
             if dropped and self._nod_start is None:
                 self._nod_start = t
             elif not dropped and self._nod_start is not None:
