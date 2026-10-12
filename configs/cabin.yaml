@@ -19,6 +19,8 @@ eyes:
   blink_min_s: 0.05      # shorter closures are treated as noise
   blink_max_s: 0.5       # closure up to this = normal blink
   microsleep_min_s: 1.0  # closure at least this long = microsleep; in between = slow blink
+  ignore_during_yawn: false  # live demo turns this on: eyes squeezed shut in a yawn are not a microsleep
+  yawn_hold_s: 1.0       # ...once the mouth has been open / hand-covered this long (DMD labels such closures as closed)
 
 mouth:
   yawn_mar: 0.45         # mouth aspect ratio above this...

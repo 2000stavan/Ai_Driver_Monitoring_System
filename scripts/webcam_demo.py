@@ -142,6 +142,7 @@ def main() -> None:
     cfg = load_config("cabin", profile="india" if args.india else None)
     if args.demo_timing:
         cfg["perclos"]["window_s"] = 20
+    cfg["eyes"]["ignore_during_yawn"] = True  # a yawn's squeezed eyes should not raise a microsleep alarm
     timing = "demo (20 s window)" if args.demo_timing else "standard"
     calib_s = args.calib or cfg["calibration"]["live_seconds"]
     cap = cv2.VideoCapture(args.video if args.video else args.camera)
@@ -156,7 +157,7 @@ def main() -> None:
     tracker = FaceTracker(resolve(cfg["model_path"]))
     hand_tracker = None if args.no_hands else HandTracker(resolve(cfg["hand_model_path"]))
     calibrator, monitor = Calibrator.from_config(cfg, calib_s), None
-    log, t0 = [], time.monotonic()
+    log, frames_log, t0 = [], [], time.monotonic()
     history: deque = deque(maxlen=900)
     recent: deque = deque(maxlen=8)
     last_sound: dict[str, float] = {}
@@ -184,6 +185,9 @@ def main() -> None:
                 if n % 3 == 0 or not hand_feats:  # hands every 3rd frame, carried forward
                     hand_feats = hand_face_features(hand_tracker.process(frame, t), face)
                 feats.update(hand_feats)
+            frames_log.append({"t": t, "face": feats is not None, "calibrating": monitor is None,
+                               **({k: feats.get(k) for k in ("ear", "mar", "jaw_open", "blink_score", "yaw", "pitch",
+                                                            "hand_mouth")} if feats else {})})
 
             view = frame.copy() if video_fps else cv2.flip(frame, 1)  # mirror only the webcam view
             scale = VIEW_H / view.shape[0]
@@ -229,6 +233,11 @@ def main() -> None:
                     cv2.rectangle(view, (w // 2 - 230, VIEW_H - 80), (w // 2 + 230, VIEW_H - 28), (20, 120, 230), -1)
                     text(view, toast[0], (w // 2 - 210, VIEW_H - 44), 0.95, WHITE, 2, outline=False)
                 panel = draw_panel(monitor.state, profile, timing, history, recent, False, 1.0)
+                if feats is not None:  # live mouth reading vs the yawn thresholds
+                    m = cfg["mouth"]
+                    cv2.putText(panel, f"mouth {feats['mar']:.2f} (yawn > {m['yawn_mar']})  jaw {feats['jaw_open']:.2f} "
+                                f"(> {m['yawn_jaw_score']})", (20, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.42, GREY, 1,
+                                cv2.LINE_AA)
 
             cv2.putText(panel, "q: quit    c: recalibrate", (20, VIEW_H - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45, GREY, 1,
                         cv2.LINE_AA)
@@ -265,7 +274,8 @@ def main() -> None:
         out.parent.mkdir(parents=True, exist_ok=True)
         cols = ["type", "start", "end", "confidence", "info"]
         pd.DataFrame(log, columns=cols).to_csv(out, index=False)
-        print(f"Saved {len(log)} events to {out.relative_to(PROJECT_ROOT)}")
+        pd.DataFrame(frames_log).to_csv(out.with_name("webcam_frames.csv"), index=False)
+        print(f"Saved {len(log)} events to {out.relative_to(PROJECT_ROOT)} (per-frame readings: webcam_frames.csv)")
 
 
 def _mirror(face):

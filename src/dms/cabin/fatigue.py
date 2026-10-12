@@ -99,6 +99,17 @@ class CabinMonitor:
         closed = f is not None and self.eyes_closed(f)
         mouth = f is not None and self.mouth_open(f)
         off_road = f is not None and self.head_off_road(f)
+        hm = math.nan if f is None else f.get("hand_mouth", math.nan)
+        if not math.isnan(hm) and hm < m_cfg.get("hand_mouth_dist", 0.3):
+            self._last_cover_t = t
+        covered = t - self._last_cover_t <= m_cfg.get("hand_gap_s", 0.5)
+        # Eyes squeeze shut during a yawn: that closure belongs to the yawn, not a microsleep / PERCLOS.
+        # Only once the mouth has been open / covered for a while (a yawn), not for brief mouth movements.
+        hold = e_cfg.get("yawn_hold_s", 0.7)
+        yawning = (mouth and self._mouth.start is not None and t - self._mouth.start >= hold) or \
+                  (covered and self._covered.start is not None and t - self._covered.start >= hold)
+        if e_cfg.get("ignore_during_yawn", False) and yawning:
+            closed = False
 
         # Eye closures -> BLINK / SLOW_BLINK / MICROSLEEP
         ended, s = self._eyes.update(closed, t)
@@ -124,10 +135,6 @@ class CabinMonitor:
         # Hand held over the mouth (mouth not visible) -> YAWN with hand.
         # In deployment this is ambiguous with eating / drinking; the distraction module
         # (objects in hand) decides which one it is.
-        hm = math.nan if f is None else f.get("hand_mouth", math.nan)
-        if not math.isnan(hm) and hm < m_cfg.get("hand_mouth_dist", 0.3):
-            self._last_cover_t = t
-        covered = t - self._last_cover_t <= m_cfg.get("hand_gap_s", 0.5)
         ended, s = self._covered.update(covered, t)
         if ended and self._last_cover_t - s >= m_cfg.get("yawn_hand_min_s", 2.0):
             self._add_yawn(events, s, self._last_cover_t, covered=True)
