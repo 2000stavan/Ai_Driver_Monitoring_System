@@ -2,8 +2,7 @@
 
     .venv/bin/streamlit run app/streamlit_app.py
 
-Three views on data we already have (no synced cabin + telematics + road drive exists yet; that
-comes from our own Session C recordings, see recording/PROTOCOL.md):
+Three views, each on a public dataset (a synchronised cabin + telematics + road drive is future work):
   1. Driver camera  - a DMD recording: our detected events vs. DMD's ground-truth labels
   2. Driving        - a LEVIN trip: speed, vehicle-frame acceleration, harsh events, attributed context
   3. Road camera    - an IDD Lite image: Western-only (Cityscapes) vs. Indian fine-tuned segmentation
@@ -41,7 +40,7 @@ COLORS = {"BLINK": "#9aa5b1", "SLOW_BLINK": "#f0ad4e", "MICROSLEEP": "#d9534f", 
 
 st.set_page_config(page_title="Driver Monitoring", layout="wide")
 st.title("Driver monitoring — v1 dashboard")
-st.caption("Prototype. Cabin and driving views use different datasets; a synced drive comes from our own recordings.")
+st.caption("Prototype. Each view runs on a different public dataset (cabin: DMD, driving: LEVIN Pune, road: IDD Lite). One synchronised drive across all three is future work.")
 
 
 def timeline(lanes: dict[str, list[tuple[float, float, str]]], title: str) -> go.Figure:
