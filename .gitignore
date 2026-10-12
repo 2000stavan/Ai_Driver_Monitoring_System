@@ -27,6 +27,8 @@ kaggle.json
 # OS / editors
 .DS_Store
 .vscode/
-.claude/settings.local.json
 .idea/
 dist/
+
+# Local tool settings
+.claude/
